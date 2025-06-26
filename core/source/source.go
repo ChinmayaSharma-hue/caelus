@@ -8,7 +8,6 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
-	"log"
 	"time"
 )
 
@@ -34,12 +33,33 @@ type Source interface {
 	GetData(metadataList []Metadata) ([]Data, error)
 }
 
+func NewSource(ctx context.Context, sourceConfig config.Source) (Source, error) {
+	rawSource, ok := sourceConfig.(config.RawSource)
+	if !ok {
+		return nil, fmt.Errorf("source config is not a raw source")
+	}
+	switch rawSource.Type {
+	case "gmail":
+		gmailConfig, ok := rawSource.Value.(config.GmailConfig)
+		if !ok {
+			return nil, fmt.Errorf("source config is not a gmail config")
+		}
+		gmailSource, err := NewGmailSource(ctx, gmailConfig)
+		if err != nil {
+			return nil, err
+		}
+		return gmailSource, nil
+	default:
+		return nil, fmt.Errorf("source type %s is not supported", rawSource.Type)
+	}
+}
+
 type GmailSource struct {
 	config config.GmailConfig
 	client *gmail.Service
 }
 
-func NewGmailSource(ctx context.Context, cfg config.GmailConfig) *GmailSource {
+func NewGmailSource(ctx context.Context, cfg config.GmailConfig) (*GmailSource, error) {
 	oauthConfig := &oauth2.Config{
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
@@ -58,13 +78,13 @@ func NewGmailSource(ctx context.Context, cfg config.GmailConfig) *GmailSource {
 	// Create Gmail API client
 	svc, err := gmail.NewService(ctx, option.WithTokenSource(tokenSource))
 	if err != nil {
-		log.Fatalf("Failed to create Gmail client: %v", err)
+		return nil, err
 	}
 
 	return &GmailSource{
 		config: cfg,
 		client: svc,
-	}
+	}, nil
 }
 
 func (s *GmailSource) GetMetadata() ([]Metadata, error) {
@@ -105,7 +125,7 @@ func (s *GmailSource) GetMetadata() ([]Metadata, error) {
 	return metadataList, nil
 }
 
-func (s *GmailSource) GetData(metadataList []Metadata) (Data, error) {
+func (s *GmailSource) GetData(metadataList []Metadata) ([]Data, error) {
 	dataList := make([]Data, 0)
 	user := "me"
 	for _, metadataInterfaceComponent := range metadataList {
