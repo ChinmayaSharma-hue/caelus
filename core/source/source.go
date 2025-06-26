@@ -3,7 +3,9 @@ package source
 import (
 	"context"
 	"fmt"
+	"github.com/ChinmayaSharma-hue/caelus/core"
 	"github.com/ChinmayaSharma-hue/caelus/core/config"
+	"github.com/qdrant/go-client/qdrant"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
@@ -11,26 +13,21 @@ import (
 	"time"
 )
 
-// Metadata is a list of mailMetadata
-type Metadata interface{}
-
-// Data is a list of components
-type Data interface{}
-
 type mailMetadata struct {
 	id       string
 	threadID string
 	sender   string
-	date     string
+	date     time.Time
 }
 
 type mailData struct {
-	data string
+	metadata mailMetadata
+	data     string
 }
 
 type Source interface {
-	GetMetadata() ([]Metadata, error)
-	GetData(metadataList []Metadata) ([]Data, error)
+	GetMetadata() ([]core.Metadata, error)
+	GetData(metadataList []core.Metadata) ([]core.Data, error)
 }
 
 func NewSource(ctx context.Context, sourceConfig config.Source) (Source, error) {
@@ -87,7 +84,7 @@ func NewGmailSource(ctx context.Context, cfg config.GmailConfig) (*GmailSource, 
 	}, nil
 }
 
-func (s *GmailSource) GetMetadata() ([]Metadata, error) {
+func (s *GmailSource) GetMetadata() ([]core.Metadata, error) {
 	user := "me"
 	// TODO: make the duration configurable
 	request := s.client.Users.Messages.List(user).Q("newer_than:1d")
@@ -96,7 +93,7 @@ func (s *GmailSource) GetMetadata() ([]Metadata, error) {
 		return nil, err
 	}
 
-	metadataList := make([]Metadata, 0)
+	metadataList := make([]core.Metadata, 0)
 	for _, message := range response.Messages {
 		metadataComponent := mailMetadata{
 			id:       message.Id,
@@ -117,7 +114,7 @@ func (s *GmailSource) GetMetadata() ([]Metadata, error) {
 					// TODO: Find a dump or a solution for unparsable dates
 					return nil, err
 				}
-				metadataComponent.date = date.Format("2006-01-02")
+				metadataComponent.date = date
 			}
 		}
 		metadataList = append(metadataList, metadataComponent)
@@ -125,8 +122,8 @@ func (s *GmailSource) GetMetadata() ([]Metadata, error) {
 	return metadataList, nil
 }
 
-func (s *GmailSource) GetData(metadataList []Metadata) ([]Data, error) {
-	dataList := make([]Data, 0)
+func (s *GmailSource) GetData(metadataList []core.Metadata) ([]core.Data, error) {
+	dataList := make([]core.Data, 0)
 	user := "me"
 	for _, metadataInterfaceComponent := range metadataList {
 		metadataComponent, ok := metadataInterfaceComponent.(mailMetadata)
@@ -141,4 +138,14 @@ func (s *GmailSource) GetData(metadataList []Metadata) ([]Data, error) {
 		dataList = append(dataList, mailData{data: response.Payload.Body.Data})
 	}
 	return dataList, nil
+}
+
+func (md mailData) QdrantPayload() map[string]*qdrant.Value {
+	return map[string]*qdrant.Value{
+		"id":        {Kind: &qdrant.Value_StringValue{StringValue: md.metadata.id}},
+		"thread_id": {Kind: &qdrant.Value_StringValue{StringValue: md.metadata.threadID}},
+		"sender":    {Kind: &qdrant.Value_StringValue{StringValue: md.metadata.sender}},
+		"date":      {Kind: &qdrant.Value_DoubleValue{DoubleValue: float64(md.metadata.date.Unix())}},
+		"data":      {Kind: &qdrant.Value_StringValue{StringValue: md.data}},
+	}
 }

@@ -4,6 +4,7 @@ go 1.24.2
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/qdrant/go-client v1.14.1
 	golang.org/x/oauth2 v0.30.0
 	google.golang.org/api v0.239.0
 	gopkg.in/yaml.v3 v3.0.1

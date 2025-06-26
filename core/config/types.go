@@ -9,6 +9,8 @@ type Database interface{}
 
 type Source interface{}
 
+type Engine interface{}
+
 type Config struct {
 	Databases map[string]RawDatabase `yaml:"database"`
 	Ingestor  Ingestor               `yaml:"ingestor"`
@@ -30,6 +32,12 @@ type RawSource struct {
 	Value  Source    `yaml:"value"`
 }
 
+type RawEngine struct {
+	Type   string    `yaml:"type"`
+	Config yaml.Node `yaml:"config"`
+	Value  Engine    `yaml:"value"`
+}
+
 type PostgresConfig struct {
 	Host     string `yaml:"host"`
 	Port     string `yaml:"port"`
@@ -42,6 +50,7 @@ type QdrantConfig struct {
 	Host       string `yaml:"host"`
 	Port       string `yaml:"port"`
 	Collection string `yaml:"collection"`
+	Generator  string `yaml:"generator"`
 }
 
 type GmailConfig struct {
@@ -49,6 +58,11 @@ type GmailConfig struct {
 	ClientID     string `yaml:"clientID"`
 	ClientSecret string `yaml:"clientSecret"`
 	RefreshToken string `yaml:"refreshToken"`
+}
+
+type OllamaConfig struct {
+	Model    string `yaml:"model"`
+	Endpoint string `yaml:"endpoint"`
 }
 
 func (rd *RawDatabase) UnmarshalYAML(value *yaml.Node) error {
@@ -75,6 +89,7 @@ func (rd *RawDatabase) UnmarshalYAML(value *yaml.Node) error {
 		if err := tmp.Config.Decode(&cfg); err != nil {
 			return fmt.Errorf("error decoding qdrant config: %w", err)
 		}
+		rd.Value = cfg
 
 	default:
 		return fmt.Errorf("unsupported database type: %s", tmp.Type)
@@ -101,6 +116,34 @@ func (rs *RawSource) UnmarshalYAML(value *yaml.Node) error {
 		if err := tmp.Config.Decode(&cfg); err != nil {
 			return fmt.Errorf("error decoding gmail config: %w", err)
 		}
+		rs.Value = cfg
+	default:
+		return fmt.Errorf("unsupported source type: %s", tmp.Type)
+	}
+
+	return nil
+}
+
+func (rs *RawEngine) UnmarshalYAML(value *yaml.Node) error {
+	var tmp struct {
+		Type   string    `yaml:"type"`
+		Config yaml.Node `yaml:"config"`
+	}
+
+	if err := value.Decode(&tmp); err != nil {
+		return err
+	}
+
+	rs.Type = tmp.Type
+	rs.Config = tmp.Config
+
+	switch tmp.Type {
+	case "ollama":
+		var cfg OllamaConfig
+		if err := tmp.Config.Decode(&cfg); err != nil {
+			return fmt.Errorf("error decoding ollama config: %w", err)
+		}
+		rs.Value = cfg
 	default:
 		return fmt.Errorf("unsupported source type: %s", tmp.Type)
 	}

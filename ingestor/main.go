@@ -1,21 +1,49 @@
 package ingestor
 
 import (
+	"context"
+	"flag"
 	"github.com/ChinmayaSharma-hue/caelus/core/config"
+	"github.com/ChinmayaSharma-hue/caelus/core/source"
+	"log"
+	"sync"
 )
 
 func main() {
-	// make an api call to the source API
-	// what should be configurable?
-	// ingestionSourceType: gmail for now
-	// ingestionSourceFilters: duration, mailing list
-	// rate limit is set for gmail API so spawn as many goroutines as feasible
-	// get a list of messages for the day in one go, and spawn goroutines to get each different sets
-	// in each goroutine that gets a set of messages, it should do the following,
-	// push metadata in a bulk insert to the metadata DB
-	// get an embedding for each of the messages
-	// push the embedding to the vector DB
-	config, err := config.N
+	// create a new context
+	ctx := context.Background()
+	var wg sync.WaitGroup
+
+	// todo: decide how to do logging
+	// getting the newConfig
+	configPath := flag.String("newConfig", "newConfig.json", "Path to configuration file")
+	newConfig, err := config.NewConfig(*configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// creating all the sources specified in the newConfig
+	for _, sourceConfig := range newConfig.Ingestor.Sources {
+		newSource, err := source.NewSource(ctx, sourceConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		metadataList, err := newSource.GetMetadata()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		errors := make(chan error, 0)
+		for i := 0; i < Routines; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				errors <- ingest(ctx, newSource, metadataList)
+			}()
+		}
+	}
 
 	// division of functionalities
 	// communication with source: get a list of mails, get each mail
