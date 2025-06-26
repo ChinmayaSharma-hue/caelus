@@ -7,5 +7,6 @@ type Metadata interface{}
 
 // Data is a list of components
 type Data interface {
+	String() string
 	QdrantPayload() map[string]*qdrant.Value
 }

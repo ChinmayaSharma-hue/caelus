@@ -14,10 +14,12 @@ type Engine interface{}
 type Config struct {
 	Databases map[string]RawDatabase `yaml:"database"`
 	Ingestor  Ingestor               `yaml:"ingestor"`
+	Engine    Engine                 `yaml:"engine"`
 }
 
 type Ingestor struct {
 	Sources []Source `yaml:"sources"`
+	Sinks   []string `yaml:"sinks"`
 }
 
 type RawDatabase struct {
@@ -27,9 +29,10 @@ type RawDatabase struct {
 }
 
 type RawSource struct {
-	Type   string    `yaml:"type"`
-	Config yaml.Node `yaml:"config"`
-	Value  Source    `yaml:"value"`
+	Type       string    `yaml:"type"`
+	Collection string    `yaml:"collection"`
+	Config     yaml.Node `yaml:"config"`
+	Value      Source    `yaml:"value"`
 }
 
 type RawEngine struct {
@@ -100,14 +103,16 @@ func (rd *RawDatabase) UnmarshalYAML(value *yaml.Node) error {
 
 func (rs *RawSource) UnmarshalYAML(value *yaml.Node) error {
 	var tmp struct {
-		Type   string    `yaml:"type"`
-		Config yaml.Node `yaml:"config"`
+		Type       string    `yaml:"type"`
+		Collection string    `yaml:"collection"`
+		Config     yaml.Node `yaml:"config"`
 	}
 	if err := value.Decode(&tmp); err != nil {
 		return err
 	}
 
 	rs.Type = tmp.Type
+	rs.Collection = tmp.Collection
 	rs.Config = tmp.Config
 
 	switch tmp.Type {

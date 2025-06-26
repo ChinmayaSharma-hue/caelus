@@ -28,6 +28,7 @@ type mailData struct {
 type Source interface {
 	GetMetadata() ([]core.Metadata, error)
 	GetData(metadataList []core.Metadata) ([]core.Data, error)
+	GetCollection() string
 }
 
 func NewSource(ctx context.Context, sourceConfig config.Source) (Source, error) {
@@ -41,7 +42,7 @@ func NewSource(ctx context.Context, sourceConfig config.Source) (Source, error) 
 		if !ok {
 			return nil, fmt.Errorf("source config is not a gmail config")
 		}
-		gmailSource, err := NewGmailSource(ctx, gmailConfig)
+		gmailSource, err := NewGmailSource(ctx, gmailConfig, rawSource.Collection)
 		if err != nil {
 			return nil, err
 		}
@@ -52,11 +53,12 @@ func NewSource(ctx context.Context, sourceConfig config.Source) (Source, error) 
 }
 
 type GmailSource struct {
-	config config.GmailConfig
-	client *gmail.Service
+	config     config.GmailConfig
+	client     *gmail.Service
+	collection string
 }
 
-func NewGmailSource(ctx context.Context, cfg config.GmailConfig) (*GmailSource, error) {
+func NewGmailSource(ctx context.Context, cfg config.GmailConfig, collection string) (*GmailSource, error) {
 	oauthConfig := &oauth2.Config{
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
@@ -79,8 +81,9 @@ func NewGmailSource(ctx context.Context, cfg config.GmailConfig) (*GmailSource, 
 	}
 
 	return &GmailSource{
-		config: cfg,
-		client: svc,
+		config:     cfg,
+		client:     svc,
+		collection: collection,
 	}, nil
 }
 
@@ -140,6 +143,10 @@ func (s *GmailSource) GetData(metadataList []core.Metadata) ([]core.Data, error)
 	return dataList, nil
 }
 
+func (s *GmailSource) GetCollection() string {
+	return s.collection
+}
+
 func (md mailData) QdrantPayload() map[string]*qdrant.Value {
 	return map[string]*qdrant.Value{
 		"id":        {Kind: &qdrant.Value_StringValue{StringValue: md.metadata.id}},
@@ -148,4 +155,8 @@ func (md mailData) QdrantPayload() map[string]*qdrant.Value {
 		"date":      {Kind: &qdrant.Value_DoubleValue{DoubleValue: float64(md.metadata.date.Unix())}},
 		"data":      {Kind: &qdrant.Value_StringValue{StringValue: md.data}},
 	}
+}
+
+func (md mailData) String() string {
+	return md.data
 }
