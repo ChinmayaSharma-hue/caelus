@@ -62,7 +62,7 @@ func (ingestionManager ingestionManager) Run(ctx context.Context) error {
 
 		index := 0
 		for _, ingestionSink := range ingestionManager.sinks {
-			errors := make(chan error, 0)
+			errors := make(chan error)
 			for i := 0; i < Routines; i++ {
 				wg.Add(1)
 				go func() {
