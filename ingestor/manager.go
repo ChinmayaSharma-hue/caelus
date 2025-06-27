@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"github.com/ChinmayaSharma-hue/caelus/core"
 	"github.com/ChinmayaSharma-hue/caelus/core/config"
+	"github.com/ChinmayaSharma-hue/caelus/core/data"
 	"github.com/ChinmayaSharma-hue/caelus/core/engine"
+	"github.com/ChinmayaSharma-hue/caelus/core/sink"
 	"github.com/ChinmayaSharma-hue/caelus/core/source"
-	"github.com/ChinmayaSharma-hue/caelus/core/vectorstore"
 	"log/slog"
 	"sync"
 )
@@ -18,7 +18,7 @@ type IngestionManager interface {
 type ingestionManager struct {
 	sources []source.Source
 	engine  engine.Engine
-	sinks   []vectorstore.VectorStore
+	sinks   []sink.Sink
 }
 
 func NewIngestionManager(ctx context.Context, config config.Ingestor) (IngestionManager, error) {
@@ -31,7 +31,7 @@ func NewIngestionManager(ctx context.Context, config config.Ingestor) (Ingestion
 	}
 
 	var sources []source.Source
-	var sinks []vectorstore.VectorStore
+	var sinks []sink.Sink
 	for _, sourceConfig := range config.Sources {
 		logger.Info("creating a new source", slog.String("component", "IngestionManager"), slog.String("ingestionSourceType", sourceConfig.Type))
 		newSource, err := source.NewSource(ctx, sourceConfig)
@@ -42,7 +42,7 @@ func NewIngestionManager(ctx context.Context, config config.Ingestor) (Ingestion
 	}
 	for _, sinkConfig := range config.Sinks {
 		logger.Info("creating a new sink", slog.String("component", "IngestionManager"), slog.String("ingestionSinkType", sinkConfig.Type))
-		newSink, err := vectorstore.NewVectorStore(ctx, sinkConfig, newEngine)
+		newSink, err := sink.NewSink(ctx, sinkConfig, newEngine)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +79,7 @@ func (ingestionManager ingestionManager) Run(ctx context.Context) error {
 				batch := metadataList[start:end]
 
 				wg.Add(1)
-				go func(batch []core.Metadata) {
+				go func(batch []data.Metadata) {
 					defer wg.Done()
 
 					ingest(ctx, ingestionSource, ingestionSink, batch)
@@ -91,7 +91,7 @@ func (ingestionManager ingestionManager) Run(ctx context.Context) error {
 	return nil
 }
 
-func ingest(ctx context.Context, source source.Source, sink vectorstore.VectorStore, metadataList []core.Metadata) {
+func ingest(ctx context.Context, source source.Source, sink sink.Sink, metadataList []data.Metadata) {
 	// todo: push metadata in a bulk insert to the metadata DB
 	// get an embedding for each of the messages
 	data, err := source.GetData(ctx, metadataList)

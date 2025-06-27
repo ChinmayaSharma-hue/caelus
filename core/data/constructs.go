@@ -1,4 +1,4 @@
-package core
+package data
 
 import "github.com/qdrant/go-client/qdrant"
 
