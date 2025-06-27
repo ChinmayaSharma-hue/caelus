@@ -17,6 +17,10 @@ type MailData struct {
 	Data     string
 }
 
+func (mmd MailMetadata) String() string {
+	return mmd.Id
+}
+
 func (md MailData) QdrantPayload() map[string]*qdrant.Value {
 	return map[string]*qdrant.Value{
 		"id":        {Kind: &qdrant.Value_StringValue{StringValue: md.Metadata.Id}},

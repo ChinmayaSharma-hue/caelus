@@ -1,19 +1,6 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:16
-    container_name: postgres
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: caelus
-    volumes:
-      - ./relationalDB/init.sql:/docker-entrypoint-initdb.d/init.sql
-    restart: unless-stopped
-
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant
@@ -33,6 +20,18 @@ services:
       - ollama_data:/root/.source
     restart: unless-stopped
 
+  nats:
+    image: nats:latest
+    container_name: nats
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # Monitoring
+    volumes:
+      - nats_data:/data
+    restart: unless-stopped
+
 volumes:
   qdrant_data:
   ollama_data:
+  nats_data:

@@ -11,6 +11,8 @@ type Source interface{}
 
 type Engine interface{}
 
+type Buffer interface{}
+
 type Sink interface{}
 
 type Config struct {
@@ -20,6 +22,7 @@ type Config struct {
 type Ingestor struct {
 	Sources []RawSource `yaml:"sources"`
 	Engine  RawEngine   `yaml:"engine"`
+	Buffers []RawBuffer `yaml:"buffers"`
 	Sinks   []RawSink   `yaml:"sinks"`
 }
 
@@ -34,6 +37,12 @@ type RawEngine struct {
 	Type   string    `yaml:"type"`
 	Config yaml.Node `yaml:"config"`
 	Value  Engine    `yaml:"value"`
+}
+
+type RawBuffer struct {
+	Type   string    `yaml:"type"`
+	Config yaml.Node `yaml:"config"`
+	Value  Buffer    `yaml:"value"`
 }
 
 type RawSink struct {
@@ -70,6 +79,12 @@ type OllamaConfig struct {
 	Endpoint string `yaml:"endpoint"`
 }
 
+type NatsConfig struct {
+	Host string `yaml:"host"`
+	Port string `yaml:"port"`
+	Name string `yaml:"name"`
+}
+
 func (rd *RawSink) UnmarshalYAML(value *yaml.Node) error {
 	var tmp struct {
 		Kind   string    `yaml:"kind"`
@@ -94,6 +109,33 @@ func (rd *RawSink) UnmarshalYAML(value *yaml.Node) error {
 
 	default:
 		return fmt.Errorf("unsupported sink type: %s", tmp.Type)
+	}
+
+	return nil
+}
+
+func (rd *RawBuffer) UnmarshalYAML(value *yaml.Node) error {
+	var tmp struct {
+		Type   string    `yaml:"type"`
+		Config yaml.Node `yaml:"config"`
+	}
+	if err := value.Decode(&tmp); err != nil {
+		return err
+	}
+
+	rd.Type = tmp.Type
+	rd.Config = tmp.Config
+
+	switch tmp.Type {
+	case "nats":
+		var cfg NatsConfig
+		if err := tmp.Config.Decode(&cfg); err != nil {
+			return fmt.Errorf("error decoding nats config: %w", err)
+		}
+		rd.Value = cfg
+
+	default:
+		return fmt.Errorf("unsupported buffer type: %s", tmp.Type)
 	}
 
 	return nil

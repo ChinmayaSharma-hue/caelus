@@ -81,9 +81,12 @@ func (q *QdrantConnector) Upsert(ctx context.Context, data []data.Data, collecti
 		}
 
 		uuidStr := uuid.New().String()
+		payload := d.QdrantPayload()
+		// adding a consumed flag for smarter fetch based on this filter
+		payload["consumed"] = &qdrant.Value{Kind: &qdrant.Value_BoolValue{BoolValue: false}}
 		point := &qdrant.PointStruct{
 			Id:      &qdrant.PointId{PointIdOptions: &qdrant.PointId_Uuid{Uuid: uuidStr}},
-			Payload: d.QdrantPayload(),
+			Payload: payload,
 			Vectors: &qdrant.Vectors{VectorsOptions: &qdrant.Vectors_Vector{Vector: &qdrant.Vector{Data: embedding}}},
 		}
 		points = append(points, point)

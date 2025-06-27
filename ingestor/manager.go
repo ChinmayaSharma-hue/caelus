@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/ChinmayaSharma-hue/caelus/core/buffer"
 	"github.com/ChinmayaSharma-hue/caelus/core/config"
 	"github.com/ChinmayaSharma-hue/caelus/core/data"
 	"github.com/ChinmayaSharma-hue/caelus/core/engine"
@@ -18,6 +19,7 @@ type IngestionManager interface {
 type ingestionManager struct {
 	sources []source.Source
 	engine  engine.Engine
+	buffers []buffer.Buffer
 	sinks   []sink.Sink
 }
 
@@ -31,6 +33,7 @@ func NewIngestionManager(ctx context.Context, config config.Ingestor) (Ingestion
 	}
 
 	var sources []source.Source
+	var buffers []buffer.Buffer
 	var sinks []sink.Sink
 	for _, sourceConfig := range config.Sources {
 		logger.Info("creating a new source", slog.String("component", "IngestionManager"), slog.String("ingestionSourceType", sourceConfig.Type))
@@ -39,6 +42,14 @@ func NewIngestionManager(ctx context.Context, config config.Ingestor) (Ingestion
 			return nil, err
 		}
 		sources = append(sources, newSource)
+	}
+	for _, bufferConfig := range config.Buffers {
+		logger.Info("creating a new buffer", slog.String("component", "IngestionManager"), slog.String("ingestionBufferType", bufferConfig.Type))
+		newBuffer, err := buffer.NewBuffer(ctx, bufferConfig)
+		if err != nil {
+			return nil, err
+		}
+		buffers = append(buffers, newBuffer)
 	}
 	for _, sinkConfig := range config.Sinks {
 		logger.Info("creating a new sink", slog.String("component", "IngestionManager"), slog.String("ingestionSinkType", sinkConfig.Type))
@@ -52,6 +63,7 @@ func NewIngestionManager(ctx context.Context, config config.Ingestor) (Ingestion
 	return ingestionManager{
 		sources: sources,
 		engine:  newEngine,
+		buffers: buffers,
 		sinks:   sinks,
 	}, nil
 }
@@ -60,30 +72,34 @@ func (ingestionManager ingestionManager) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 
 	for _, ingestionSource := range ingestionManager.sources {
+		// getting the metadata
 		metadataList, err := ingestionSource.GetMetadata(ctx)
 		if err != nil {
 			return err
 		}
 
-		chunkSize := (len(metadataList) + Routines - 1) / Routines // ceil division
-		for _, ingestionSink := range ingestionManager.sinks {
-			for i := 0; i < Routines; i++ {
-				start := i * chunkSize
-				end := start + chunkSize
-				if end > len(metadataList) {
-					end = len(metadataList)
-				}
-				if start >= len(metadataList) {
-					break // no more data
-				}
-				batch := metadataList[start:end]
+		for _, ingestionBuffer := range ingestionManager.buffers {
+			// batching the metadata into different goroutines to fetch the data
+			chunkSize := (len(metadataList) + Routines - 1) / Routines // ceil division
+			for _, ingestionSink := range ingestionManager.sinks {
+				for i := 0; i < Routines; i++ {
+					start := i * chunkSize
+					end := start + chunkSize
+					if end > len(metadataList) {
+						end = len(metadataList)
+					}
+					if start >= len(metadataList) {
+						break // no more data
+					}
+					batch := metadataList[start:end]
 
-				wg.Add(1)
-				go func(batch []data.Metadata) {
-					defer wg.Done()
+					wg.Add(1)
+					go func(batch []data.Metadata) {
+						defer wg.Done()
 
-					ingest(ctx, ingestionSource, ingestionSink, batch)
-				}(batch)
+						ingest(ctx, ingestionSource, ingestionBuffer, ingestionSink, batch)
+					}(batch)
+				}
 			}
 		}
 	}
@@ -91,16 +107,21 @@ func (ingestionManager ingestionManager) Run(ctx context.Context) error {
 	return nil
 }
 
-func ingest(ctx context.Context, source source.Source, sink sink.Sink, metadataList []data.Metadata) {
-	// todo: push metadata in a bulk insert to the metadata DB
+func ingest(ctx context.Context, source source.Source, buffer buffer.Buffer, sink sink.Sink, metadataList []data.Metadata) {
+	// push metadata in a bulk insert to the buffer
+	err := buffer.EnqueueBatch(ctx, metadataList)
+	if err != nil {
+		return
+	}
+
 	// get an embedding for each of the messages
-	data, err := source.GetData(ctx, metadataList)
+	ingestedData, err := source.GetData(ctx, metadataList)
 	if err != nil {
 		return
 	}
 
 	// push the embedding to the vector DB
-	err = sink.Upsert(ctx, data, source.GetCollection(ctx), EmbbeddingSize)
+	err = sink.Upsert(ctx, ingestedData, source.GetCollection(ctx), EmbbeddingSize)
 	if err != nil {
 		return
 	}
