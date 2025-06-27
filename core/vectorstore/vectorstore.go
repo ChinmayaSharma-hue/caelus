@@ -2,7 +2,6 @@ package vectorstore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/ChinmayaSharma-hue/caelus/core"
 	"github.com/ChinmayaSharma-hue/caelus/core/config"
@@ -12,24 +11,26 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"log/slog"
+	"strconv"
 )
 
 type VectorStore interface {
 	Upsert(ctx context.Context, data []core.Data, collection string, size int) error
 }
 
-func NewVectorStore(ctx context.Context, dbConfig config.Database, generator engine.Engine) (VectorStore, error) {
-	rawDatabase, ok := dbConfig.(config.RawDatabase)
-	if !ok {
-		return nil, errors.New("database config is not a raw database config")
-	}
-	switch rawDatabase.Type {
+func NewVectorStore(ctx context.Context, sinkConfig config.RawSink, generator engine.Engine) (VectorStore, error) {
+	logger := ctx.Value("logger").(*slog.Logger)
+
+	logger.Info("creating vector store", slog.String("component", "Sink"))
+	switch sinkConfig.Type {
 	case "qdrant":
-		qdrantConfig, ok := rawDatabase.Value.(config.QdrantConfig)
+		qdrantConfig, ok := sinkConfig.Value.(config.QdrantConfig)
 		if !ok {
+			logger.Error("failed to cast qdrant config", slog.String("type", sinkConfig.Type), slog.String("component", "Sink"))
 			return nil, fmt.Errorf("database config is not a qdrant config")
 		}
-		qdrantConnector, err := NewQdrantConnector(qdrantConfig, generator)
+		qdrantConnector, err := NewQdrantConnector(ctx, qdrantConfig, generator)
 		if err != nil {
 			return nil, err
 		}
@@ -45,16 +46,21 @@ type QdrantConnector struct {
 	generator      engine.Engine
 }
 
-func NewQdrantConnector(config config.QdrantConfig, generator engine.Engine) (*QdrantConnector, error) {
+func NewQdrantConnector(ctx context.Context, config config.QdrantConfig, generator engine.Engine) (*QdrantConnector, error) {
+	logger := ctx.Value("logger").(*slog.Logger)
+
 	url := config.Host + ":" + config.Port
 	conn, err := grpc.Dial(url, grpc.WithInsecure())
 	if err != nil {
+		logger.Error("failed to connect to qdrant", slog.String("url", url), slog.String("component", "Sink"))
 		return nil, err
 	}
 	return &QdrantConnector{config: config, grpcConnection: conn, generator: generator}, nil
 }
 
 func (q *QdrantConnector) Upsert(ctx context.Context, data []core.Data, collection string, size int) error {
+	logger := ctx.Value("logger").(*slog.Logger)
+
 	// creating the collection
 	collectionsClient := qdrant.NewCollectionsClient(q.grpcConnection)
 	_, err := collectionsClient.Get(ctx, &qdrant.GetCollectionInfoRequest{
@@ -64,6 +70,7 @@ func (q *QdrantConnector) Upsert(ctx context.Context, data []core.Data, collecti
 		// If not found, create it
 		st, ok := status.FromError(err)
 		if ok && st.Code() == codes.NotFound {
+			logger.Info("creating collection", slog.String("collection", collection), slog.String("component", "Sink"))
 			_, err = collectionsClient.Create(context.Background(), &qdrant.CreateCollection{
 				CollectionName: collection,
 				VectorsConfig: &qdrant.VectorsConfig{
@@ -76,17 +83,20 @@ func (q *QdrantConnector) Upsert(ctx context.Context, data []core.Data, collecti
 				},
 			})
 			if err != nil {
+				logger.Error("failed to create collection", slog.String("collection", collection), slog.String("component", "Sink"), slog.Any("error", err))
 				return fmt.Errorf("failed to create collection: %w", err)
 			}
 		} else {
+			logger.Error("failed to get collection", slog.String("collection", collection), slog.String("component", "Sink"), slog.Any("error", err))
 			return fmt.Errorf("failed to check collection: %w", err)
 		}
 	}
 
 	// creating the point
+	logger.Info("creating the points", slog.String("collection", collection), slog.String("component", "Sink"))
 	points := make([]*qdrant.PointStruct, 0, len(data))
 	for _, d := range data {
-		embedding, err := q.generator.Embed(d.String())
+		embedding, err := q.generator.Embed(ctx, d.String())
 		if err != nil {
 			return err
 		}
@@ -105,14 +115,18 @@ func (q *QdrantConnector) Upsert(ctx context.Context, data []core.Data, collecti
 	}
 
 	// upserting the points
+	logger.Info("upserting the points", slog.String("collection", collection), slog.String("component", "Sink"))
 	pointsClient := qdrant.NewPointsClient(q.grpcConnection)
 	_, err = pointsClient.Upsert(ctx, &qdrant.UpsertPoints{
 		CollectionName: collection,
 		Points:         points,
 	})
 	if err != nil {
+		logger.Error("could not upsert the points", slog.String("collection", collection), slog.String("component", "Sink"), slog.Any("error", err))
 		return fmt.Errorf("failed to upsert points: %w", err)
 	}
+
+	logger.Info("successfully upserted the points", slog.String("collection", collection), slog.String("count", strconv.Itoa(len(points))))
 
 	return nil
 }

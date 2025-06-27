@@ -1,6 +1,6 @@
-package ingestor
+package main
 
 const (
-	Routines       = 10
+	Routines       = 30
 	EmbbeddingSize = 768
 )

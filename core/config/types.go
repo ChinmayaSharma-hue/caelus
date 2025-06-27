@@ -11,21 +11,16 @@ type Source interface{}
 
 type Engine interface{}
 
+type Sink interface{}
+
 type Config struct {
-	Databases map[string]RawDatabase `yaml:"database"`
-	Ingestor  Ingestor               `yaml:"ingestor"`
-	Engine    Engine                 `yaml:"engine"`
+	Ingestor Ingestor `yaml:"ingestor"`
 }
 
 type Ingestor struct {
-	Sources []Source `yaml:"sources"`
-	Sinks   []string `yaml:"sinks"`
-}
-
-type RawDatabase struct {
-	Type   string    `yaml:"type"`
-	Config yaml.Node `yaml:"config"`
-	Value  Database  `yaml:"value"`
+	Sources []RawSource `yaml:"sources"`
+	Engine  RawEngine   `yaml:"engine"`
+	Sinks   []RawSink   `yaml:"sinks"`
 }
 
 type RawSource struct {
@@ -39,6 +34,13 @@ type RawEngine struct {
 	Type   string    `yaml:"type"`
 	Config yaml.Node `yaml:"config"`
 	Value  Engine    `yaml:"value"`
+}
+
+type RawSink struct {
+	Kind   string    `yaml:"kind"`
+	Type   string    `yaml:"type"`
+	Config yaml.Node `yaml:"config"`
+	Value  Sink      `yaml:"value"`
 }
 
 type PostgresConfig struct {
@@ -68,8 +70,9 @@ type OllamaConfig struct {
 	Endpoint string `yaml:"endpoint"`
 }
 
-func (rd *RawDatabase) UnmarshalYAML(value *yaml.Node) error {
+func (rd *RawSink) UnmarshalYAML(value *yaml.Node) error {
 	var tmp struct {
+		Kind   string    `yaml:"kind"`
 		Type   string    `yaml:"type"`
 		Config yaml.Node `yaml:"config"`
 	}
@@ -77,16 +80,11 @@ func (rd *RawDatabase) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 
+	rd.Kind = tmp.Kind
 	rd.Type = tmp.Type
 	rd.Config = tmp.Config
 
 	switch tmp.Type {
-	case "postgres":
-		var cfg PostgresConfig
-		if err := tmp.Config.Decode(&cfg); err != nil {
-			return fmt.Errorf("error decoding postgres config: %w", err)
-		}
-		rd.Value = cfg
 	case "qdrant":
 		var cfg QdrantConfig
 		if err := tmp.Config.Decode(&cfg); err != nil {
@@ -95,7 +93,7 @@ func (rd *RawDatabase) UnmarshalYAML(value *yaml.Node) error {
 		rd.Value = cfg
 
 	default:
-		return fmt.Errorf("unsupported database type: %s", tmp.Type)
+		return fmt.Errorf("unsupported sink type: %s", tmp.Type)
 	}
 
 	return nil
