@@ -1,0 +1,55 @@
+sources:
+  - type: "gmail"
+    collection: "mails"
+    config:
+      filters: ""
+      clientID: ""
+      clientSecret: ""
+      refreshToken : ""
+buffer:
+  type: "nats"
+  config:
+    host: "nats"
+    port: "4222"
+    name: "mails"
+sinks:
+  - kind: "vector"
+    type: "qdrant"
+    config:
+      host: "qdrant"
+      port: "6334"
+      collection: "mails"
+      generator: "ollama"
+storage:
+  - kind: "prompts"
+    type: "minio"
+    config:
+      host: "minio"
+      port: "9000"
+      bucket: "prompts"
+      accessKey: ""
+      secretKey: ""
+  - kind: "responses"
+    type: "minio"
+    config:
+      host: "minio"
+      port: "9000"
+      bucket: "responses"
+      accessKey: "minioadmin"
+      secretKey: "minioadmin"
+engine:
+  type: "ollama"
+  config:
+    model: "nomic-embed-text"
+    endpoint: "http://ollama:11434"
+llm:
+  kind: "API"
+  type: "OpenAI"
+  config:
+    apikey: ""
+    model: "o3"
+application:
+  embeddingSize: 768
+  ingestionRoutines: 30
+  maxPromptTokens: 30000
+  maxUsageTokens: 1500

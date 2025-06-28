@@ -8,6 +8,8 @@ import (
 	"github.com/ChinmayaSharma-hue/caelus/src/core/storage"
 	"github.com/sashabaranov/go-openai"
 	"log/slog"
+	"sync/atomic"
+	"time"
 )
 
 type FeederManager interface {
@@ -98,6 +100,23 @@ func (f feederManager) Run(ctx context.Context) {
 			go w.Start()
 		}
 	}
+
+	// Reset tokensUsed daily
+	go func() {
+		for {
+			now := time.Now()
+			// Calculate duration until next midnight
+			next := now.Truncate(24 * time.Hour).Add(24 * time.Hour)
+			durationUntilNext := time.Until(next)
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(durationUntilNext):
+				atomic.StoreInt64(f.tokensUsed, 0)
+			}
+		}
+	}()
 
 	// Graceful shutdown
 	<-ctx.Done()
