@@ -37,14 +37,16 @@ func NewProcessorManager(ctx context.Context, appConfig *config.Config) (Process
 		sinks = append(sinks, newSink)
 	}
 	for _, storageConfig := range appConfig.Storage {
-		logger.Info("creating a new storage",
-			slog.String("component", "processorManager"),
-			slog.String("storageType", storageConfig.Type))
-		newStorage, err := storage.NewStorage(ctx, storageConfig)
-		if err != nil {
-			return nil, err
+		if storageConfig.Kind == "prompts" {
+			logger.Info("creating a new storage",
+				slog.String("component", "processorManager"),
+				slog.String("storageType", storageConfig.Type))
+			newStorage, err := storage.NewStorage(ctx, storageConfig)
+			if err != nil {
+				return nil, err
+			}
+			storages = append(storages, newStorage)
 		}
-		storages = append(storages, newStorage)
 	}
 	logger.Info("creating a new buffer to fetch sink metadata",
 		slog.String("component", "processorManager"),
@@ -86,14 +88,14 @@ func (p processorManager) Run(ctx context.Context) {
 	workers := make([]*worker, numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		for _, processSink := range p.sinks {
-			for _, processStorage := range p.storages {
+			for _, promptStorage := range p.storages {
 				wctx, wcancel := context.WithCancel(ctx)
 				workers[i] = &worker{
 					preprocessedBuffer: p.preprocessedBuffer,
 					processedBuffer:    p.processedBuffer,
 					sink:               processSink,
 					ctx:                wctx,
-					storage:            processStorage,
+					storage:            promptStorage,
 					cancel:             wcancel,
 				}
 				go workers[i].Start()

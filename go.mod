@@ -8,6 +8,7 @@ require (
 	github.com/nats-io/nats.go v1.43.0
 	github.com/pkoukk/tiktoken-go v0.1.7
 	github.com/qdrant/go-client v1.14.1
+	github.com/sashabaranov/go-openai v1.40.3
 	golang.org/x/oauth2 v0.30.0
 	google.golang.org/api v0.239.0
 	google.golang.org/grpc v1.73.0

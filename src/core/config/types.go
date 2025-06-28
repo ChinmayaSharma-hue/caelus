@@ -17,12 +17,15 @@ type Sink interface{}
 
 type Storage interface{}
 
+type LLM interface{}
+
 type Config struct {
 	Sources []RawSource  `yaml:"sources"`
 	Buffer  RawBuffer    `yaml:"buffer"`
 	Sinks   []RawSink    `yaml:"sinks"`
 	Storage []RawStorage `yaml:"storage"`
 	Engine  RawEngine    `yaml:"engine"`
+	LLM     RawLLM       `yaml:"llm"`
 }
 
 type RawSource struct {
@@ -56,6 +59,13 @@ type RawStorage struct {
 	Type   string    `yaml:"type"`
 	Config yaml.Node `yaml:"config"`
 	Value  Storage   `yaml:"value"`
+}
+
+type RawLLM struct {
+	Kind   string    `yaml:"kind"`
+	Type   string    `yaml:"type"`
+	Config yaml.Node `yaml:"config"`
+	Value  LLM       `yaml:"value"`
 }
 
 type PostgresConfig struct {
@@ -97,6 +107,11 @@ type MinioConfig struct {
 	AccessKey string `yaml:"accessKey"`
 	SecretKey string `yaml:"secretKey"`
 	Bucket    string `yaml:"bucket"`
+}
+
+type OpenAIConfig struct {
+	APIKey string `yaml:"apikey"`
+	Model  string `yaml:"model"`
 }
 
 func (rd *RawSink) UnmarshalYAML(value *yaml.Node) error {
@@ -233,6 +248,35 @@ func (rs *RawEngine) UnmarshalYAML(value *yaml.Node) error {
 		rs.Value = cfg
 	default:
 		return fmt.Errorf("unsupported source type: %s", tmp.Type)
+	}
+
+	return nil
+}
+
+func (rs *RawLLM) UnmarshalYAML(value *yaml.Node) error {
+	var tmp struct {
+		Kind   string    `yaml:"kind"`
+		Type   string    `yaml:"type"`
+		Config yaml.Node `yaml:"config"`
+	}
+
+	if err := value.Decode(&tmp); err != nil {
+		return err
+	}
+
+	rs.Kind = tmp.Kind
+	rs.Type = tmp.Type
+	rs.Config = tmp.Config
+
+	switch tmp.Type {
+	case "OpenAI":
+		var cfg OpenAIConfig
+		if err := tmp.Config.Decode(&cfg); err != nil {
+			return fmt.Errorf("error decoding openai config: %w", err)
+		}
+		rs.Value = cfg
+	default:
+		return fmt.Errorf("unsupported llm type: %s", tmp.Type)
 	}
 
 	return nil
