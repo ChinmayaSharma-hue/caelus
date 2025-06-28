@@ -133,7 +133,7 @@ func (w *worker) processMessage(message buffer.Message) error {
 		return err
 	}
 
-	logger.Info("successfully pulished a new prompt",
+	logger.Info("successfully published a new prompt",
 		slog.String("component", "processor"),
 		slog.String("id", objectKey))
 

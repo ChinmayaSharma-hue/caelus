@@ -1,11 +1,34 @@
 package main
 
+import (
+	"context"
+	"flag"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
+	"log/slog"
+	"os"
+)
+
 func main() {
-	// just reads from the buffer for prompts that need to be sent to the model
-	// the pattern can be the same as processor, but for now one worker is sufficient, since we have to manage cost across workers
-	// each worker does the following
-	// picks a prompt ID from the buffer
-	// gets the associated prompt from the promptStorage
-	// sends the prompt to the model
-	// in the response, checks the tokens used, and sends another prompt if it is only 50% of allowed token usage per day
+	// create a new context
+	ctx := context.Background()
+
+	// create a new logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx = context.WithValue(ctx, "logger", logger)
+
+	// getting the newConfig
+	configPath := flag.String("newConfig", "config.yaml", "Path to configuration file")
+	newConfig, err := config.NewConfig(*configPath)
+	if err != nil {
+		logger.Error("Error reading configuration file", "error", err)
+		return
+	}
+
+	// getting the feeder manager
+	manager, err := NewFeederManager(ctx, newConfig, maxAllowedTokens)
+	if err != nil {
+		logger.Error("Error creating feeder manager", "error", err)
+	}
+
+	manager.Run(ctx)
 }
