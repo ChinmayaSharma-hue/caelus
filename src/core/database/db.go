@@ -1,8 +1,8 @@
-package db
+package database
 
 import (
 	"fmt"
-	"github.com/ChinmayaSharma-hue/caelus/core/config"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
 	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

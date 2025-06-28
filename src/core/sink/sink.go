@@ -3,14 +3,17 @@ package sink
 import (
 	"context"
 	"fmt"
-	"github.com/ChinmayaSharma-hue/caelus/core/config"
-	"github.com/ChinmayaSharma-hue/caelus/core/data"
-	"github.com/ChinmayaSharma-hue/caelus/core/engine"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/data"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/engine"
 	"log/slog"
 )
 
 type Sink interface {
-	Upsert(ctx context.Context, data []data.Data, collection string, size int) error
+	Upsert(ctx context.Context, data []data.Data, size int) error
+	Fetch(ctx context.Context, filters map[string]string) (map[string]data.Data, error)
+	MarkConsumed(ctx context.Context, ids []string) error
+	GetCollection(ctx context.Context) string
 }
 
 func NewSink(ctx context.Context, sinkConfig config.RawSink, generator engine.Engine) (Sink, error) {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/ChinmayaSharma-hue/caelus/core/config"
-	"github.com/ChinmayaSharma-hue/caelus/core/data"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/data"
 	"google.golang.org/api/gmail/v1"
 	"log/slog"
 )
@@ -32,7 +32,7 @@ func NewSource(ctx context.Context, sourceConfig config.Source) (Source, error) 
 			return nil, fmt.Errorf("source config is not a gmail config")
 		}
 		logger.Info("creating a new gmail source", slog.String("component", "Source"), slog.String("type", rawSource.Type))
-		gmailSource, err := NewGmailSource(ctx, gmailConfig, rawSource.Collection)
+		gmailSource, err := NewGmailConnector(ctx, gmailConfig, rawSource.Collection)
 		if err != nil {
 			return nil, err
 		}

@@ -3,8 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/ChinmayaSharma-hue/caelus/core/config"
-	"log"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
 	"log/slog"
 	"os"
 )
@@ -17,22 +16,24 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	ctx = context.WithValue(ctx, "logger", logger)
 
-	// todo: decide how to do logging
 	// getting the newConfig
 	configPath := flag.String("newConfig", "config.yaml", "Path to configuration file")
 	newConfig, err := config.NewConfig(*configPath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("Error reading configuration file", "error", err)
+		return
 	}
 
 	// getting the ingestion manager
-	manager, err := NewIngestionManager(ctx, newConfig.Ingestor)
+	manager, err := NewIngestionManager(ctx, newConfig)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("Error creating ingestion manager", "error", err)
+		return
 	}
 
 	err = manager.Run(ctx)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("Error running ingestion manager", "error", err)
+		return
 	}
 }

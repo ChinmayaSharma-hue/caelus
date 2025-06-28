@@ -15,15 +15,14 @@ type Buffer interface{}
 
 type Sink interface{}
 
-type Config struct {
-	Ingestor Ingestor `yaml:"ingestor"`
-}
+type Storage interface{}
 
-type Ingestor struct {
-	Sources []RawSource `yaml:"sources"`
-	Engine  RawEngine   `yaml:"engine"`
-	Buffers []RawBuffer `yaml:"buffers"`
-	Sinks   []RawSink   `yaml:"sinks"`
+type Config struct {
+	Sources []RawSource  `yaml:"sources"`
+	Buffer  RawBuffer    `yaml:"buffer"`
+	Sinks   []RawSink    `yaml:"sinks"`
+	Storage []RawStorage `yaml:"storage"`
+	Engine  RawEngine    `yaml:"engine"`
 }
 
 type RawSource struct {
@@ -50,6 +49,13 @@ type RawSink struct {
 	Type   string    `yaml:"type"`
 	Config yaml.Node `yaml:"config"`
 	Value  Sink      `yaml:"value"`
+}
+
+type RawStorage struct {
+	Kind   string    `yaml:"kind"`
+	Type   string    `yaml:"type"`
+	Config yaml.Node `yaml:"config"`
+	Value  Storage   `yaml:"value"`
 }
 
 type PostgresConfig struct {
@@ -83,6 +89,14 @@ type NatsConfig struct {
 	Host string `yaml:"host"`
 	Port string `yaml:"port"`
 	Name string `yaml:"name"`
+}
+
+type MinioConfig struct {
+	Host      string `yaml:"host"`
+	Port      string `yaml:"port"`
+	AccessKey string `yaml:"accessKey"`
+	SecretKey string `yaml:"secretKey"`
+	Bucket    string `yaml:"bucket"`
 }
 
 func (rd *RawSink) UnmarshalYAML(value *yaml.Node) error {
@@ -164,6 +178,34 @@ func (rs *RawSource) UnmarshalYAML(value *yaml.Node) error {
 		rs.Value = cfg
 	default:
 		return fmt.Errorf("unsupported source type: %s", tmp.Type)
+	}
+
+	return nil
+}
+
+func (rs *RawStorage) UnmarshalYAML(value *yaml.Node) error {
+	var tmp struct {
+		Kind   string    `yaml:"kind"`
+		Type   string    `yaml:"type"`
+		Config yaml.Node `yaml:"config"`
+	}
+	if err := value.Decode(&tmp); err != nil {
+		return err
+	}
+
+	rs.Kind = tmp.Kind
+	rs.Type = tmp.Type
+	rs.Config = tmp.Config
+
+	switch tmp.Type {
+	case "minio":
+		var cfg MinioConfig
+		if err := tmp.Config.Decode(&cfg); err != nil {
+			return fmt.Errorf("error decoding minio config: %w", err)
+		}
+		rs.Value = cfg
+	default:
+		return fmt.Errorf("unsupported storage type: %s", tmp.Type)
 	}
 
 	return nil

@@ -3,15 +3,20 @@ package buffer
 import (
 	"context"
 	"fmt"
-	"github.com/ChinmayaSharma-hue/caelus/core/config"
-	"github.com/ChinmayaSharma-hue/caelus/core/data"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/data"
 	"log/slog"
 )
 
 type Buffer interface {
 	EnqueueBatch(ctx context.Context, metadata []data.Metadata) error
-	Dequeue(ctx context.Context) (interface{}, error)
-	MarkConsumed(ctx context.Context, message interface{}) error
+	Enqueue(ctx context.Context, metadata data.Metadata) error
+	Dequeue(ctx context.Context) (Message, error)
+	MarkConsumed(ctx context.Context, message Message) error
+}
+
+type Message interface {
+	GetMessageData() string
 }
 
 func NewBuffer(ctx context.Context, bufferConfig config.Buffer) (Buffer, error) {

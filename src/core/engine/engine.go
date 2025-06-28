@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ChinmayaSharma-hue/caelus/core/config"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
 	"io/ioutil"
 	"log/slog"
 	"net/http"

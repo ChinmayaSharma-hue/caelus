@@ -15,7 +15,7 @@ services:
     container_name: source
     image: ollama/ollama:latest
     ports:
-      - "11440:11434"
+      - "11440:11434" # REST API
     volumes:
       - ollama_data:/root/.source
     restart: unless-stopped
@@ -31,7 +31,22 @@ services:
       - nats_data:/data
     restart: unless-stopped
 
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"      # MinIO API
+      - "9001:9001"      # MinIO Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server --console-address ":9001" /data
+    restart: unless-stopped
+
 volumes:
   qdrant_data:
   ollama_data:
   nats_data:
+  minio_data:

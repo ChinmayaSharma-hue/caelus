@@ -3,8 +3,8 @@ package buffer
 import (
 	"context"
 	"fmt"
-	"github.com/ChinmayaSharma-hue/caelus/core/config"
-	"github.com/ChinmayaSharma-hue/caelus/core/data"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/data"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"log/slog"
@@ -15,6 +15,10 @@ type natsStreamingBuffer struct {
 	producer jetstream.JetStream
 	consumer jetstream.Consumer
 	name     string
+}
+
+type natsMessage struct {
+	message jetstream.Msg
 }
 
 func NewNATSStreamingBuffer(ctx context.Context, config config.NatsConfig) (Buffer, error) {
@@ -86,7 +90,7 @@ func (buffer *natsStreamingBuffer) EnqueueBatch(ctx context.Context, metadata []
 			logger.Error("could not enqueue metadata",
 				slog.String("name", buffer.name),
 				slog.String("error", err.Error()),
-				slog.String("metadata", string(m.String())),
+				slog.String("metadata", m.String()),
 				slog.String("component", "buffer"))
 			return err
 		}
@@ -95,7 +99,27 @@ func (buffer *natsStreamingBuffer) EnqueueBatch(ctx context.Context, metadata []
 	return nil
 }
 
-func (buffer *natsStreamingBuffer) Dequeue(ctx context.Context) (interface{}, error) {
+func (buffer *natsStreamingBuffer) Enqueue(ctx context.Context, metadata data.Metadata) error {
+	logger := ctx.Value("logger").(*slog.Logger)
+
+	logger.Info("pushing the metadata to the buffer",
+		slog.String("component", "buffer"),
+		slog.String("name", buffer.name))
+	_, err := buffer.producer.Publish(ctx, fmt.Sprintf("%s.new", buffer.name), []byte(metadata.String()))
+	if err != nil {
+		logger.Error("could not enqueue metadata",
+			slog.String("component", "buffer"),
+			slog.String("name", buffer.name),
+			slog.String("error", err.Error()),
+			slog.String("metadata", metadata.String()),
+			slog.String("component", "buffer"))
+		return err
+	}
+
+	return nil
+}
+
+func (buffer *natsStreamingBuffer) Dequeue(ctx context.Context) (Message, error) {
 	logger := ctx.Value("logger").(*slog.Logger)
 
 	logger.Info("dequeuing the buffer",
@@ -111,17 +135,17 @@ func (buffer *natsStreamingBuffer) Dequeue(ctx context.Context) (interface{}, er
 	}
 
 	for message := range batch.Messages() {
-		return message, nil
+		return natsMessage{message: message}, nil
 	}
 
 	return nil, nil
 }
 
-func (buffer *natsStreamingBuffer) MarkConsumed(ctx context.Context, message interface{}) error {
+func (buffer *natsStreamingBuffer) MarkConsumed(ctx context.Context, message Message) error {
 	logger := ctx.Value("logger").(*slog.Logger)
 
-	natsMessage := message.(jetstream.Msg)
-	err := natsMessage.Ack()
+	castNatsMessage := message.(natsMessage)
+	err := castNatsMessage.message.Ack()
 	if err != nil {
 		logger.Error("could not mark message as consumed",
 			slog.String("name", buffer.name),
@@ -131,4 +155,8 @@ func (buffer *natsStreamingBuffer) MarkConsumed(ctx context.Context, message int
 	}
 
 	return nil
+}
+
+func (msg natsMessage) GetMessageData() string {
+	return string(msg.message.Data())
 }

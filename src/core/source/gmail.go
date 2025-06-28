@@ -3,23 +3,24 @@ package source
 import (
 	"context"
 	"fmt"
-	"github.com/ChinmayaSharma-hue/caelus/core/config"
-	"github.com/ChinmayaSharma-hue/caelus/core/data"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
+	data2 "github.com/ChinmayaSharma-hue/caelus/src/core/data"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 	"log/slog"
+	"strings"
 	"time"
 )
 
-type GmailSource struct {
+type GmailConnector struct {
 	config     config.GmailConfig
 	client     *gmail.Service
 	collection string
 }
 
-func NewGmailSource(ctx context.Context, cfg config.GmailConfig, collection string) (*GmailSource, error) {
+func NewGmailConnector(ctx context.Context, cfg config.GmailConfig, collection string) (*GmailConnector, error) {
 	logger := ctx.Value("logger").(*slog.Logger)
 
 	oauthConfig := &oauth2.Config{
@@ -44,14 +45,14 @@ func NewGmailSource(ctx context.Context, cfg config.GmailConfig, collection stri
 		return nil, err
 	}
 
-	return &GmailSource{
+	return &GmailConnector{
 		config:     cfg,
 		client:     svc,
 		collection: collection,
 	}, nil
 }
 
-func (s *GmailSource) GetMetadata(ctx context.Context) ([]data.Metadata, error) {
+func (s *GmailConnector) GetMetadata(ctx context.Context) ([]data2.Metadata, error) {
 	logger := ctx.Value("logger").(*slog.Logger)
 
 	user := "me"
@@ -64,9 +65,9 @@ func (s *GmailSource) GetMetadata(ctx context.Context) ([]data.Metadata, error) 
 		return nil, err
 	}
 
-	metadataList := make([]data.Metadata, 0)
+	metadataList := make([]data2.Metadata, 0)
 	for _, message := range response.Messages {
-		metadataList = append(metadataList, data.MailMetadata{
+		metadataList = append(metadataList, data2.MailMetadata{
 			Id:       message.Id,
 			ThreadID: message.ThreadId,
 		})
@@ -74,14 +75,14 @@ func (s *GmailSource) GetMetadata(ctx context.Context) ([]data.Metadata, error) 
 	return metadataList, nil
 }
 
-func (s *GmailSource) GetData(ctx context.Context, metadataList []data.Metadata) ([]data.Data, error) {
+func (s *GmailConnector) GetData(ctx context.Context, metadataList []data2.Metadata) ([]data2.Data, error) {
 	logger := ctx.Value("logger").(*slog.Logger)
 
 	logger.Info("ingestion of data from the metadata", slog.String("component", "Source"))
-	dataList := make([]data.Data, 0)
+	dataList := make([]data2.Data, 0)
 	user := "me"
 	for _, metadataInterfaceComponent := range metadataList {
-		metadataComponent, ok := metadataInterfaceComponent.(data.MailMetadata)
+		metadataComponent, ok := metadataInterfaceComponent.(data2.MailMetadata)
 		if !ok {
 			logger.Error("could not cast metadata", slog.String("component", "Source"))
 			return nil, fmt.Errorf("mailMetadata interface component is not of type Metadata")
@@ -94,7 +95,12 @@ func (s *GmailSource) GetData(ctx context.Context, metadataList []data.Metadata)
 		}
 		sender := ""
 		date := time.Time{}
+		belongsToMailingList := false
 		for _, header := range response.Payload.Headers {
+			if (header.Name == "X-Mailing-List") && (strings.Contains(header.Value, s.config.Filters)) {
+				belongsToMailingList = true
+			}
+
 			switch header.Name {
 			case "Sender":
 				sender = header.Value
@@ -112,17 +118,20 @@ func (s *GmailSource) GetData(ctx context.Context, metadataList []data.Metadata)
 				}
 			}
 		}
+		if !belongsToMailingList {
+			continue
+		}
 		body, err := extractMessageBody(response.Payload)
 		if err != nil {
 			logger.Error("could not extract message body", slog.String("component", "Source"), slog.String("error", err.Error()), slog.String("id", metadataComponent.Id))
 			return nil, err
 		}
-		dataList = append(dataList, data.MailData{Data: body, Metadata: metadataComponent, Sender: sender, Date: date})
+		dataList = append(dataList, data2.MailData{Data: body, Metadata: metadataComponent, Sender: sender, Date: date})
 	}
 	return dataList, nil
 }
 
-func (s *GmailSource) GetCollection(ctx context.Context) string {
+func (s *GmailConnector) GetCollection(ctx context.Context) string {
 	logger := ctx.Value("logger").(*slog.Logger)
 	logger.Info("fetching collection", slog.String("collection", s.collection))
 	return s.collection
