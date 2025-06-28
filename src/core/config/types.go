@@ -20,12 +20,13 @@ type Storage interface{}
 type LLM interface{}
 
 type Config struct {
-	Sources []RawSource  `yaml:"sources"`
-	Buffer  RawBuffer    `yaml:"buffer"`
-	Sinks   []RawSink    `yaml:"sinks"`
-	Storage []RawStorage `yaml:"storage"`
-	Engine  RawEngine    `yaml:"engine"`
-	LLM     RawLLM       `yaml:"llm"`
+	Sources     []RawSource       `yaml:"sources"`
+	Buffer      RawBuffer         `yaml:"buffer"`
+	Sinks       []RawSink         `yaml:"sinks"`
+	Storage     []RawStorage      `yaml:"storage"`
+	Engine      RawEngine         `yaml:"engine"`
+	LLM         RawLLM            `yaml:"llm"`
+	Application ApplicationConfig `yaml:"application"`
 }
 
 type RawSource struct {
@@ -112,6 +113,13 @@ type MinioConfig struct {
 type OpenAIConfig struct {
 	APIKey string `yaml:"apikey"`
 	Model  string `yaml:"model"`
+}
+
+type ApplicationConfig struct {
+	EmbeddingSize     int `yaml:"embeddingSize"`
+	IngestionRoutines int `yaml:"ingestionRoutines"`
+	MaxPromptTokens   int `yaml:"maxPromptTokens"`
+	MaxUsageTokes     int `yaml:"maxUsageTokens"`
 }
 
 func (rd *RawSink) UnmarshalYAML(value *yaml.Node) error {

@@ -19,6 +19,7 @@ type processorManager struct {
 	storages           []storage.Storage
 	preprocessedBuffer buffer.Buffer
 	processedBuffer    buffer.Buffer
+	maxPromptTokens    int
 }
 
 func NewProcessorManager(ctx context.Context, appConfig *config.Config) (ProcessorManager, error) {
@@ -80,6 +81,7 @@ func NewProcessorManager(ctx context.Context, appConfig *config.Config) (Process
 		storages:           storages,
 		preprocessedBuffer: preprocessedBuffer,
 		processedBuffer:    processedBuffer,
+		maxPromptTokens:    appConfig.Application.MaxPromptTokens,
 	}, nil
 }
 
@@ -97,6 +99,7 @@ func (p processorManager) Run(ctx context.Context) {
 					ctx:                wctx,
 					storage:            promptStorage,
 					cancel:             wcancel,
+					maxPromptTokens:    p.maxPromptTokens,
 				}
 				go workers[i].Start()
 			}

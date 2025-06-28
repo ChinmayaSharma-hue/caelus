@@ -2,6 +2,7 @@ package buffer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
 	"github.com/ChinmayaSharma-hue/caelus/src/core/data"
@@ -81,10 +82,14 @@ func NewNATSStreamingBuffer(ctx context.Context, config config.NatsConfig) (Buff
 func (buffer *natsStreamingBuffer) EnqueueBatch(ctx context.Context, metadata []data.Metadata) error {
 	logger := ctx.Value("logger").(*slog.Logger)
 
-	logger.Info("pushing the metadata to the buffer",
+	logger.Info("pushing the metadata in a batch to the buffer",
 		slog.String("component", "buffer"),
 		slog.String("name", buffer.name))
 	for _, m := range metadata {
+		logger.Info("pushing metadata to the buffer",
+			slog.String("metadata", m.String()),
+			slog.String("component", "buffer"),
+			slog.String("name", buffer.name))
 		_, err := buffer.producer.Publish(ctx, fmt.Sprintf("%s.new", buffer.name), []byte(m.String()))
 		if err != nil {
 			logger.Error("could not enqueue metadata",
@@ -104,6 +109,7 @@ func (buffer *natsStreamingBuffer) Enqueue(ctx context.Context, metadata data.Me
 
 	logger.Info("pushing the metadata to the buffer",
 		slog.String("component", "buffer"),
+		slog.String("metadata", metadata.String()),
 		slog.String("name", buffer.name))
 	_, err := buffer.producer.Publish(ctx, fmt.Sprintf("%s.new", buffer.name), []byte(metadata.String()))
 	if err != nil {
@@ -138,7 +144,7 @@ func (buffer *natsStreamingBuffer) Dequeue(ctx context.Context) (Message, error)
 		return natsMessage{message: message}, nil
 	}
 
-	return nil, nil
+	return nil, errors.New("empty buffer")
 }
 
 func (buffer *natsStreamingBuffer) MarkConsumed(ctx context.Context, message Message) error {

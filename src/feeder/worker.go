@@ -30,8 +30,19 @@ func (w *worker) Start() {
 			logger.Info("stopping worker", slog.String("component", "feeder"))
 			return
 		default:
+			if w.tokenLimit < minimumAvailableTokens {
+				logger.Warn("token limit below minimum available tokens necessity",
+					slog.String("component", "feeder"),
+					slog.Int64("minimum-available-tokens", minimumAvailableTokens),
+					slog.Int64("limit", w.tokenLimit))
+				w.cancel()
+				return
+			}
 			if atomic.LoadInt64(w.tokensUsed) >= w.tokenLimit {
-				logger.Info("token limit reached, stopping worker", slog.String("component", "feeder"))
+				logger.Info("token limit reached, stopping worker",
+					slog.String("component", "feeder"),
+					slog.Int64("tokens", atomic.LoadInt64(w.tokensUsed)),
+					slog.Int64("limit", w.tokenLimit))
 				w.cancel()
 				return
 			}

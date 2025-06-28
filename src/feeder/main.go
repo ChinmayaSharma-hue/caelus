@@ -25,7 +25,7 @@ func main() {
 	}
 
 	// getting the feeder manager
-	manager, err := NewFeederManager(ctx, newConfig, maxAllowedTokens)
+	manager, err := NewFeederManager(ctx, newConfig)
 	if err != nil {
 		logger.Error("Error creating feeder manager", "error", err)
 	}

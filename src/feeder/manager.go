@@ -24,7 +24,7 @@ type feederManager struct {
 	tokenLimit       int64
 }
 
-func NewFeederManager(ctx context.Context, appConfig *config.Config, maxAllowedTokens int64) (FeederManager, error) {
+func NewFeederManager(ctx context.Context, appConfig *config.Config) (FeederManager, error) {
 	logger := ctx.Value("logger").(*slog.Logger)
 	logger.Info("creating a new feeder manager", slog.String("component", "feederManager"))
 	var responseStorages []storage.Storage
@@ -72,7 +72,7 @@ func NewFeederManager(ctx context.Context, appConfig *config.Config, maxAllowedT
 		client:           openai.NewClient(llmConfig.APIKey),
 		model:            llmConfig.Model,
 		tokensUsed:       &tokensUsed,
-		tokenLimit:       maxAllowedTokens,
+		tokenLimit:       int64(appConfig.Application.MaxUsageTokes),
 	}, nil
 }
 

@@ -17,10 +17,12 @@ type IngestionManager interface {
 }
 
 type ingestionManager struct {
-	sources []source.Source
-	engine  engine.Engine
-	buffer  buffer.Buffer
-	sinks   []sink.Sink
+	sources       []source.Source
+	engine        engine.Engine
+	buffer        buffer.Buffer
+	sinks         []sink.Sink
+	routines      int
+	embeddingSize int
 }
 
 func NewIngestionManager(ctx context.Context, config *config.Config) (IngestionManager, error) {
@@ -58,10 +60,12 @@ func NewIngestionManager(ctx context.Context, config *config.Config) (IngestionM
 	}
 
 	return ingestionManager{
-		sources: sources,
-		engine:  newEngine,
-		buffer:  newBuffer,
-		sinks:   sinks,
+		sources:       sources,
+		engine:        newEngine,
+		buffer:        newBuffer,
+		sinks:         sinks,
+		routines:      config.Application.IngestionRoutines,
+		embeddingSize: config.Application.EmbeddingSize,
 	}, nil
 }
 
@@ -76,9 +80,9 @@ func (ingestionManager ingestionManager) Run(ctx context.Context) error {
 		}
 
 		// batching the metadata into different goroutines to fetch the data
-		chunkSize := (len(metadataList) + Routines - 1) / Routines // ceil division
+		chunkSize := (len(metadataList) + ingestionManager.routines - 1) / ingestionManager.routines // ceil division
 		for _, ingestionSink := range ingestionManager.sinks {
-			for i := 0; i < Routines; i++ {
+			for i := 0; i < ingestionManager.routines; i++ {
 				start := i * chunkSize
 				end := start + chunkSize
 				if end > len(metadataList) {
@@ -93,7 +97,7 @@ func (ingestionManager ingestionManager) Run(ctx context.Context) error {
 				go func(batch []data.Metadata) {
 					defer wg.Done()
 
-					ingest(ctx, ingestionSource, ingestionManager.buffer, ingestionSink, batch)
+					ingest(ctx, ingestionSource, ingestionManager.buffer, ingestionSink, ingestionManager.embeddingSize, batch)
 				}(batch)
 			}
 		}
@@ -102,7 +106,7 @@ func (ingestionManager ingestionManager) Run(ctx context.Context) error {
 	return nil
 }
 
-func ingest(ctx context.Context, source source.Source, buffer buffer.Buffer, sink sink.Sink, metadataList []data.Metadata) {
+func ingest(ctx context.Context, source source.Source, buffer buffer.Buffer, sink sink.Sink, embeddingSize int, metadataList []data.Metadata) {
 	// get an embedding for each of the messages
 	ingestedData, err := source.GetData(ctx, metadataList)
 	if err != nil {
@@ -110,7 +114,7 @@ func ingest(ctx context.Context, source source.Source, buffer buffer.Buffer, sin
 	}
 
 	// push the embedding to the vector DB
-	err = sink.Upsert(ctx, ingestedData, EmbbeddingSize)
+	metadataList, err = sink.Upsert(ctx, ingestedData, embeddingSize)
 	if err != nil {
 		return
 	}

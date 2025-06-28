@@ -10,7 +10,7 @@ import (
 )
 
 type Sink interface {
-	Upsert(ctx context.Context, data []data.Data, size int) error
+	Upsert(ctx context.Context, dataList []data.Data, size int) ([]data.Metadata, error)
 	Fetch(ctx context.Context, filters map[string]string) (map[string]data.Data, error)
 	MarkConsumed(ctx context.Context, ids []string) error
 	GetCollection(ctx context.Context) string

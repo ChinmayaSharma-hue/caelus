@@ -35,6 +35,10 @@ func (md MailData) String() string {
 	return md.Data
 }
 
+func (md MailData) GetMetadata() Metadata {
+	return md.Metadata
+}
+
 func FromQdrantPayload(payload map[string]*qdrant.Value) Data {
 	// todo: send back date
 	return MailData{

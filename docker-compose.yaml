@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
 
   ollama:
-    container_name: source
+    container_name: ollama
     image: ollama/ollama:latest
     ports:
       - "11440:11434" # REST API

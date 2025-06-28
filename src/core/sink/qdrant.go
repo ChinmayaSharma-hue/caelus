@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ChinmayaSharma-hue/caelus/src/core/config"
-	data2 "github.com/ChinmayaSharma-hue/caelus/src/core/data"
+	"github.com/ChinmayaSharma-hue/caelus/src/core/data"
 	"github.com/ChinmayaSharma-hue/caelus/src/core/engine"
 	"github.com/google/uuid"
 	"github.com/qdrant/go-client/qdrant"
@@ -29,13 +29,13 @@ func NewQdrantConnector(ctx context.Context, config config.QdrantConfig, generat
 	url := config.Host + ":" + config.Port
 	conn, err := grpc.Dial(url, grpc.WithInsecure())
 	if err != nil {
-		logger.Error("failed to connect to qdrant", slog.String("url", url), slog.String("component", "Sink"))
+		logger.Error("failed to connect to qdrant", slog.String("url", url), slog.String("component", "sink"))
 		return nil, err
 	}
 	return &QdrantConnector{config: config, grpcConnection: conn, generator: generator, collection: config.Collection}, nil
 }
 
-func (q *QdrantConnector) Upsert(ctx context.Context, data []data2.Data, size int) error {
+func (q *QdrantConnector) Upsert(ctx context.Context, dataList []data.Data, size int) ([]data.Metadata, error) {
 	logger := ctx.Value("logger").(*slog.Logger)
 
 	// creating the collection
@@ -47,7 +47,7 @@ func (q *QdrantConnector) Upsert(ctx context.Context, data []data2.Data, size in
 		// If not found, create it
 		st, ok := status.FromError(err)
 		if ok && st.Code() == codes.NotFound {
-			logger.Info("creating collection", slog.String("collection", q.config.Collection), slog.String("component", "Sink"))
+			logger.Info("creating collection", slog.String("collection", q.config.Collection), slog.String("component", "sink"))
 			_, err = collectionsClient.Create(context.Background(), &qdrant.CreateCollection{
 				CollectionName: q.config.Collection,
 				VectorsConfig: &qdrant.VectorsConfig{
@@ -60,25 +60,28 @@ func (q *QdrantConnector) Upsert(ctx context.Context, data []data2.Data, size in
 				},
 			})
 			if err != nil {
-				logger.Error("failed to create collection", slog.String("collection", q.config.Collection), slog.String("component", "Sink"), slog.Any("error", err))
-				return fmt.Errorf("failed to create collection: %w", err)
+				logger.Error("failed to create collection", slog.String("collection", q.config.Collection), slog.String("component", "sink"), slog.Any("error", err))
+				return nil, fmt.Errorf("failed to create collection: %w", err)
 			}
 		} else {
-			logger.Error("failed to get collection", slog.String("collection", q.config.Collection), slog.String("component", "Sink"), slog.Any("error", err))
-			return fmt.Errorf("failed to check collection: %w", err)
+			logger.Error("failed to get collection", slog.String("collection", q.config.Collection), slog.String("component", "sink"), slog.Any("error", err))
+			return nil, fmt.Errorf("failed to check collection: %w", err)
 		}
 	}
 
 	// creating the point
-	logger.Info("creating the points", slog.String("collection", q.config.Collection), slog.String("component", "Sink"))
-	points := make([]*qdrant.PointStruct, 0, len(data))
-	for _, d := range data {
+	logger.Info("creating the points", slog.String("collection", q.config.Collection), slog.String("component", "sink"))
+	points := make([]*qdrant.PointStruct, 0, len(dataList))
+	metadataList := make([]data.Metadata, 0, len(dataList))
+	for _, d := range dataList {
 		embedding, err := q.generator.Embed(ctx, d.String())
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if len(embedding) == 0 {
-			// todo: log this if it happens
+			logger.Warn("embedding is empty",
+				slog.String("collection", q.config.Collection),
+				slog.String("component", "sink"))
 			continue
 		}
 
@@ -92,26 +95,27 @@ func (q *QdrantConnector) Upsert(ctx context.Context, data []data2.Data, size in
 			Vectors: &qdrant.Vectors{VectorsOptions: &qdrant.Vectors_Vector{Vector: &qdrant.Vector{Data: embedding}}},
 		}
 		points = append(points, point)
+		metadataList = append(metadataList, d.GetMetadata())
 	}
 
 	// upserting the points
-	logger.Info("upserting the points", slog.String("collection", q.config.Collection), slog.String("component", "Sink"))
+	logger.Info("upserting the points", slog.String("collection", q.config.Collection), slog.String("component", "sink"))
 	pointsClient := qdrant.NewPointsClient(q.grpcConnection)
 	_, err = pointsClient.Upsert(ctx, &qdrant.UpsertPoints{
 		CollectionName: q.config.Collection,
 		Points:         points,
 	})
 	if err != nil {
-		logger.Error("could not upsert the points", slog.String("collection", q.config.Collection), slog.String("component", "Sink"), slog.Any("error", err))
-		return fmt.Errorf("failed to upsert points: %w", err)
+		logger.Error("could not upsert the points", slog.String("collection", q.config.Collection), slog.String("component", "sink"), slog.Any("error", err))
+		return nil, fmt.Errorf("failed to upsert points: %w", err)
 	}
 
 	logger.Info("successfully upserted the points", slog.String("collection", q.config.Collection), slog.String("count", strconv.Itoa(len(points))))
 
-	return nil
+	return metadataList, nil
 }
 
-func (q *QdrantConnector) Fetch(ctx context.Context, filters map[string]string) (map[string]data2.Data, error) {
+func (q *QdrantConnector) Fetch(ctx context.Context, filters map[string]string) (map[string]data.Data, error) {
 	logger := ctx.Value("logger").(*slog.Logger)
 
 	// getting all the filters
@@ -179,6 +183,8 @@ func (q *QdrantConnector) Fetch(ctx context.Context, filters map[string]string) 
 		return nil, fmt.Errorf("reference point with id %s not found or has no vectors", id)
 	}
 
+	logger.Info("successfully fetched reference point", slog.String("id", id), slog.String("component", "sink"))
+
 	// Extract vector
 	vectorsOutput := scrollResp.Result[0].Vectors
 	vector := vectorsOutput.GetVector().Data
@@ -209,7 +215,7 @@ func (q *QdrantConnector) Fetch(ctx context.Context, filters map[string]string) 
 	if err != nil {
 		logger.Error("could not search for vectors",
 			slog.String("collection", collection),
-			slog.String("component", "Sink"),
+			slog.String("component", "sink"),
 			slog.Any("error", err),
 			slog.String("collection", collection),
 			slog.String("id", id))
@@ -217,9 +223,9 @@ func (q *QdrantConnector) Fetch(ctx context.Context, filters map[string]string) 
 	}
 
 	// convert the vectors to []data.Data
-	results := make(map[string]data2.Data)
+	results := make(map[string]data.Data)
 	for _, point := range searchResp.Result {
-		results[point.Id.GetUuid()] = data2.FromQdrantPayload(point.Payload)
+		results[point.Id.GetUuid()] = data.FromQdrantPayload(point.Payload)
 	}
 
 	return results, nil

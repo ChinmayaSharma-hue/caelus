@@ -1,6 +1,6 @@
 package main
 
 const (
-	maxAllowedTokens = 200
-	maxWorkers       = 1
+	minimumAvailableTokens = 1000
+	maxWorkers             = 1
 )

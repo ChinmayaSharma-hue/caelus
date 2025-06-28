@@ -21,6 +21,7 @@ type worker struct {
 	storage            storage.Storage
 	ctx                context.Context
 	cancel             context.CancelFunc
+	maxPromptTokens    int
 }
 
 type promptID struct {
@@ -107,7 +108,7 @@ func (w *worker) processMessage(message buffer.Message) error {
 		tokenCount := len(tokens)
 
 		// decide whether to keep the prompt or not
-		if tokenCount > maxTokens {
+		if tokenCount > w.maxPromptTokens {
 			continue
 		}
 		prompt = temporaryPrompt

@@ -11,4 +11,5 @@ type Metadata interface {
 type Data interface {
 	String() string
 	QdrantPayload() map[string]*qdrant.Value
+	GetMetadata() Metadata
 }
